@@ -154,6 +154,8 @@ model Reservation {
 
   reservedSeats ReservedSeat[]
 
+  payments Payment[]
+
   createdAt DateTime @default(now())
 }
 
@@ -187,4 +189,28 @@ model ReservationSeat {
   seat Seat @relation(fields: [seatId], references: [id])
 
   @@unique([reservationId, seatId])
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id String @id @default(uuid())
+
+  paymentReference String @unique
+
+  reservationId String
+
+  amount Float
+
+  status PaymentStatus
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([reservationId])
 }

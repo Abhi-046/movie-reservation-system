@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAvailableSeats = exports.createReservation = void 0;
+exports.cancelReservation = exports.getReservationById = exports.getMyReservations = exports.getAvailableSeats = exports.createReservation = void 0;
 const prisma_1 = __importDefault(require("../config/prisma"));
 const createReservation = async (req, res) => {
     try {
@@ -126,3 +126,147 @@ const getAvailableSeats = async (req, res) => {
     }
 };
 exports.getAvailableSeats = getAvailableSeats;
+const getMyReservations = async (req, res) => {
+    try {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized",
+            });
+        }
+        const reservations = await prisma_1.default.reservation.findMany({
+            where: {
+                userId: req.user.id,
+            },
+            include: {
+                showtime: {
+                    include: {
+                        movie: true,
+                        screen: {
+                            include: {
+                                theatre: true,
+                            },
+                        },
+                    },
+                },
+                reservedSeats: {
+                    include: {
+                        seat: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+        });
+        res.json({
+            success: true,
+            reservations,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed",
+        });
+    }
+};
+exports.getMyReservations = getMyReservations;
+const getReservationById = async (req, res) => {
+    try {
+        const reservation = await prisma_1.default.reservation.findUnique({
+            where: {
+                id: req.params.id,
+            },
+            include: {
+                showtime: {
+                    include: {
+                        movie: true,
+                        screen: {
+                            include: {
+                                theatre: true,
+                            },
+                        },
+                    },
+                },
+                reservedSeats: {
+                    include: {
+                        seat: true,
+                    },
+                },
+            },
+        });
+        if (!reservation) {
+            return res.status(404).json({
+                success: false,
+                message: "Reservation not found",
+            });
+        }
+        res.json({
+            success: true,
+            reservation,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed",
+        });
+    }
+};
+exports.getReservationById = getReservationById;
+const cancelReservation = async (req, res) => {
+    try {
+        const reservation = await prisma_1.default.reservation.findUnique({
+            where: {
+                id: req.params.id,
+            },
+            include: {
+                showtime: true,
+            },
+        });
+        if (!reservation) {
+            return res.status(404).json({
+                success: false,
+                message: "Reservation not found",
+            });
+        }
+        if (reservation.showtime.startTime < new Date()) {
+            return res.status(400).json({
+                success: false,
+                message: "Cannot cancel past show",
+            });
+        }
+        await prisma_1.default.$transaction(async (tx) => {
+            await tx.reservedSeat.deleteMany({
+                where: {
+                    reservationId: reservation.id,
+                },
+            });
+            await tx.reservationSeat.deleteMany({
+                where: {
+                    reservationId: reservation.id,
+                },
+            });
+            await tx.reservation.update({
+                where: {
+                    id: reservation.id,
+                },
+                data: {
+                    status: "CANCELLED",
+                },
+            });
+        });
+        res.json({
+            success: true,
+            message: "Reservation cancelled",
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed",
+        });
+    }
+};
+exports.cancelReservation = cancelReservation;

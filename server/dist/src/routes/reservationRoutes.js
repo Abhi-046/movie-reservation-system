@@ -9,4 +9,7 @@ const authMiddleware_1 = require("../middleware/authMiddleware");
 const router = express_1.default.Router();
 router.post("/", authMiddleware_1.protect, reservationController_1.createReservation);
 router.get("/available/:showtimeId", reservationController_1.getAvailableSeats);
+router.get("/my-reservations", authMiddleware_1.protect, reservationController_1.getMyReservations);
+router.get("/:id", authMiddleware_1.protect, reservationController_1.getReservationById);
+router.delete("/:id/cancel", authMiddleware_1.protect, reservationController_1.cancelReservation);
 exports.default = router;

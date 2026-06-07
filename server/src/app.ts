@@ -8,7 +8,6 @@ import morgan from "morgan";
 
 import cookieParser from "cookie-parser";
 
-
 import authRoutes from "./routes/authRoutes";
 
 import { errorHandler } from "./middleware/errorMiddleware";
@@ -18,7 +17,8 @@ import theatreRoutes from "./routes/theatreRoutes";
 import screenRoutes from "./routes/screenRoutes";
 import showtimeRoutes from "./routes/showtimeRoutes";
 import reservationRoutes from "./routes/reservationRoutes";
-
+import adminRoutes from "./routes/adminRoutes";
+import paymentRoutes from "./routes/paymentRoutes";
 const app = express();
 
 app.use(
@@ -50,6 +50,8 @@ app.use("/api/screens", screenRoutes);
 app.use("/api/reservations", reservationRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/seats", seatRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/payments", paymentRoutes);
 app.use(errorHandler);
 
 export default app;

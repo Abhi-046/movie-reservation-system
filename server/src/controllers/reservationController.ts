@@ -153,3 +153,161 @@ export const getAvailableSeats = async (
     });
   }
 };
+
+export const getMyReservations = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const reservations = await prisma.reservation.findMany({
+      where: {
+        userId: req.user.id,
+      },
+
+      include: {
+        showtime: {
+          include: {
+            movie: true,
+            screen: {
+              include: {
+                theatre: true,
+              },
+            },
+          },
+        },
+
+        reservedSeats: {
+          include: {
+            seat: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    res.json({
+      success: true,
+      reservations,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed",
+    });
+  }
+};
+
+export const getReservationById = async (req: AuthRequest, res: Response) => {
+  try {
+    const reservation = await prisma.reservation.findUnique({
+      where: {
+        id: req.params.id,
+      },
+
+      include: {
+        showtime: {
+          include: {
+            movie: true,
+            screen: {
+              include: {
+                theatre: true,
+              },
+            },
+          },
+        },
+
+        reservedSeats: {
+          include: {
+            seat: true,
+          },
+        },
+      },
+    });
+
+    if (!reservation) {
+      return res.status(404).json({
+        success: false,
+        message: "Reservation not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      reservation,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed",
+    });
+  }
+};
+
+export const cancelReservation = async (req: AuthRequest, res: Response) => {
+  try {
+    const reservation = await prisma.reservation.findUnique({
+      where: {
+        id: req.params.id,
+      },
+
+      include: {
+        showtime: true,
+      },
+    });
+
+    if (!reservation) {
+      return res.status(404).json({
+        success: false,
+        message: "Reservation not found",
+      });
+    }
+
+    if (reservation.showtime.startTime < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot cancel past show",
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.reservedSeat.deleteMany({
+        where: {
+          reservationId: reservation.id,
+        },
+      });
+
+      await tx.reservationSeat.deleteMany({
+        where: {
+          reservationId: reservation.id,
+        },
+      });
+
+      await tx.reservation.update({
+        where: {
+          id: reservation.id,
+        },
+
+        data: {
+          status: "CANCELLED",
+        },
+      });
+    });
+
+    res.json({
+      success: true,
+      message: "Reservation cancelled",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed",
+    });
+  }
+};
