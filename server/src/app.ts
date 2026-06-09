@@ -19,6 +19,7 @@ import showtimeRoutes from "./routes/showtimeRoutes";
 import reservationRoutes from "./routes/reservationRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import seatLockRoutes from "./routes/seatLockRoutes";
 const app = express();
 
 app.use(
@@ -52,7 +53,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/seats", seatRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/seat-lock", seatLockRoutes);
+app.use("/api/seat-locks", seatLockRoutes);
 app.use(errorHandler);
 
 export default app;
-//646c1618-0ebd-4733-8244-a4fec3ecb0f4
+

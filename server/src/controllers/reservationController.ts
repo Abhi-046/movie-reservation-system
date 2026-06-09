@@ -1,6 +1,7 @@
 import { Response } from "express";
 import prisma from "../config/prisma";
 import { AuthRequest } from "../types/auth";
+import { getIO } from "../socket";
 
 type CreateReservationBody = {
   showtimeId?: string;
@@ -12,7 +13,7 @@ export const createReservation = async (
   res: Response,
 ) => {
   try {
-    const { showtimeId, seatIds } = req.body;
+    const { showtimeId, seatIds = [] } = req.body;
 
     if (!req.user) {
       return res.status(401).json({
@@ -21,7 +22,7 @@ export const createReservation = async (
       });
     }
 
-    if (!showtimeId || !seatIds?.length) {
+    if (!showtimeId || seatIds.length === 0) {
       return res.status(400).json({
         success: false,
         message: "showtimeId and seatIds required",
@@ -41,7 +42,7 @@ export const createReservation = async (
       });
     }
 
-    const reservation = await prisma.$transaction(async (tx) => {
+    const booking = await prisma.$transaction(async (tx) => {
       const alreadyBooked = await tx.reservedSeat.findMany({
         where: {
           showtimeId,
@@ -55,7 +56,7 @@ export const createReservation = async (
         throw new Error("SEATS_ALREADY_BOOKED");
       }
 
-      const booking = await tx.reservation.create({
+      const createdReservation = await tx.reservation.create({
         data: {
           userId: req.user!.id,
           showtimeId,
@@ -67,23 +68,25 @@ export const createReservation = async (
         data: seatIds.map((seatId) => ({
           seatId,
           showtimeId,
-          reservationId: booking.id,
+          reservationId: createdReservation.id,
         })),
       });
 
       await tx.reservationSeat.createMany({
         data: seatIds.map((seatId) => ({
           seatId,
-          reservationId: booking.id,
+          reservationId: createdReservation.id,
         })),
       });
 
-      return booking;
+      return createdReservation;
     });
+
+    getIO().to(showtimeId).emit("seat-booked", seatIds);
 
     return res.status(201).json({
       success: true,
-      reservation,
+      reservation: booking,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "SEATS_ALREADY_BOOKED") {
@@ -259,6 +262,7 @@ export const cancelReservation = async (req: AuthRequest, res: Response) => {
 
       include: {
         showtime: true,
+        reservedSeats: true,
       },
     });
 
@@ -275,6 +279,8 @@ export const cancelReservation = async (req: AuthRequest, res: Response) => {
         message: "Cannot cancel past show",
       });
     }
+
+    const releasedSeatIds = reservation.reservedSeats.map((seat) => seat.seatId);
 
     await prisma.$transaction(async (tx) => {
       await tx.reservedSeat.deleteMany({
@@ -299,6 +305,10 @@ export const cancelReservation = async (req: AuthRequest, res: Response) => {
         },
       });
     });
+
+    getIO()
+      .to(reservation.showtimeId)
+      .emit("seat-unlocked", releasedSeatIds);
 
     res.json({
       success: true,

@@ -18,6 +18,7 @@ const showtimeRoutes_1 = __importDefault(require("./routes/showtimeRoutes"));
 const reservationRoutes_1 = __importDefault(require("./routes/reservationRoutes"));
 const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
+const seatLockRoutes_1 = __importDefault(require("./routes/seatLockRoutes"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: "http://localhost:5173",
@@ -42,6 +43,7 @@ app.use("/api/auth", authRoutes_1.default);
 app.use("/api/seats", seatRoutes_1.default);
 app.use("/api/admin", adminRoutes_1.default);
 app.use("/api/payments", paymentRoutes_1.default);
+app.use("/api/seat-lock", seatLockRoutes_1.default);
+app.use("/api/seat-locks", seatLockRoutes_1.default);
 app.use(errorMiddleware_1.errorHandler);
 exports.default = app;
-//646c1618-0ebd-4733-8244-a4fec3ecb0f4

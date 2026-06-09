@@ -1,8 +1,13 @@
 import { Request, Response } from "express";
-import prisma from "../config/prisma";
-import { AuthRequest } from "../types/auth";
+import crypto from "crypto";
 
-export const payReservation = async (req: Request, res: Response) => {
+import prisma from "../config/prisma";
+import razorpay from "../config/razorpay";
+
+import { AuthRequest } from "../types/auth";
+import { getIO } from "../socket";
+
+export const createOrder = async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.body;
 
@@ -19,35 +24,83 @@ export const payReservation = async (req: Request, res: Response) => {
       });
     }
 
-    if (reservation.status !== "PENDING") {
-      return res.status(400).json({
-        success: false,
-        message: "Reservation already processed",
-      });
-    }
+    const order = await razorpay.orders.create({
+      amount: reservation.totalAmount * 100,
 
-    const paymentId = "PAY_" + Math.random().toString(36).substring(2, 10);
+      currency: "INR",
 
-    const updatedReservation = await prisma.reservation.update({
-      where: {
-        id: reservationId,
-      },
-      data: {
-        status: "CONFIRMED",
-      },
+      receipt: reservation.id,
     });
 
     return res.json({
       success: true,
-      paymentId,
-      reservation: updatedReservation,
+      order,
     });
   } catch (error) {
     console.log(error);
 
     return res.status(500).json({
       success: false,
-      message: "Payment failed",
+      message: "Failed to create order",
+    });
+  }
+};
+
+export const verifyPayment = async (req: Request, res: Response) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      reservationId,
+    } = req.body;
+
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .digest("hex");
+
+    const isValid = generatedSignature === razorpay_signature;
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed",
+      });
+    }
+
+    const reservation = await prisma.reservation.update({
+      where: {
+        id: reservationId,
+      },
+
+      data: {
+        status: "CONFIRMED",
+      },
+
+      include: {
+        reservedSeats: true,
+      },
+    });
+
+    getIO()
+      .to(reservation.showtimeId)
+      .emit(
+        "payment-confirmed",
+        reservation.reservedSeats.map((seat) => seat.seatId),
+      );
+
+    return res.json({
+      success: true,
+      message: "Payment verified successfully",
+      reservation,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Payment verification failed",
     });
   }
 };
@@ -64,8 +117,10 @@ export const getMyPayments = async (req: AuthRequest, res: Response) => {
     const payments = await prisma.reservation.findMany({
       where: {
         userId: req.user.id,
+
         status: "CONFIRMED",
       },
+
       orderBy: {
         createdAt: "desc",
       },

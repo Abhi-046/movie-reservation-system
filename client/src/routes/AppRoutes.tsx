@@ -1,12 +1,10 @@
 import { Routes, Route } from "react-router-dom";
 
 import MainLayout from "../layouts/MainLayout";
-
 import HomePage from "../pages/movies/HomePage";
-
 import LoginPage from "../pages/auth/LoginPage";
-
 import RegisterPage from "../pages/auth/RegisterPage";
+import SeatSelectionPage from "../pages/reservations/SeatSelectionPage";
 
 const AppRoutes = () => {
   return (
@@ -17,6 +15,8 @@ const AppRoutes = () => {
         <Route path="/login" element={<LoginPage />} />
 
         <Route path="/register" element={<RegisterPage />} />
+
+        <Route path="/seats/:showtimeId" element={<SeatSelectionPage />} />
       </Route>
     </Routes>
   );

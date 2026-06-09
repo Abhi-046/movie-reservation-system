@@ -5,12 +5,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMyPayments = exports.payReservation = void 0;
 const prisma_1 = __importDefault(require("../config/prisma"));
+const socket_1 = require("../socket");
 const payReservation = async (req, res) => {
     try {
         const { reservationId } = req.body;
         const reservation = await prisma_1.default.reservation.findUnique({
             where: {
                 id: reservationId,
+            },
+            include: {
+                reservedSeats: true,
             },
         });
         if (!reservation) {
@@ -34,6 +38,9 @@ const payReservation = async (req, res) => {
                 status: "CONFIRMED",
             },
         });
+        (0, socket_1.getIO)()
+            .to(updatedReservation.showtimeId)
+            .emit("payment-confirmed", reservation.reservedSeats.map((seat) => seat.seatId));
         return res.json({
             success: true,
             paymentId,
@@ -57,14 +64,10 @@ const getMyPayments = async (req, res) => {
                 message: "Unauthorized",
             });
         }
-        const payments = await prisma_1.default.payment.findMany({
+        const payments = await prisma_1.default.reservation.findMany({
             where: {
-                reservation: {
-                    userId: req.user.id,
-                },
-            },
-            include: {
-                reservation: true,
+                userId: req.user.id,
+                status: "CONFIRMED",
             },
             orderBy: {
                 createdAt: "desc",

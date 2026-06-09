@@ -1,16 +1,19 @@
-import express from "express";
+import { Router } from "express";
 
 import {
-  payReservation,
+  createOrder,
+  verifyPayment,
   getMyPayments,
 } from "../controllers/paymentController";
 
 import { protect } from "../middleware/authMiddleware";
 
-const router = express.Router();
+const router = Router();
 
-router.post("/pay", protect, payReservation);
+router.post("/create-order", protect, createOrder);
 
-router.get("/my", protect, getMyPayments);
+router.post("/verify", verifyPayment);
+
+router.get("/my-payments", protect, getMyPayments);
 
 export default router;

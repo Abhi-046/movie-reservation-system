@@ -5,16 +5,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cancelReservation = exports.getReservationById = exports.getMyReservations = exports.getAvailableSeats = exports.createReservation = void 0;
 const prisma_1 = __importDefault(require("../config/prisma"));
+const socket_1 = require("../socket");
 const createReservation = async (req, res) => {
     try {
-        const { showtimeId, seatIds } = req.body;
+        const { showtimeId, seatIds = [] } = req.body;
         if (!req.user) {
             return res.status(401).json({
                 success: false,
                 message: "Unauthorized",
             });
         }
-        if (!showtimeId || !seatIds?.length) {
+        if (!showtimeId || seatIds.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: "showtimeId and seatIds required",
@@ -31,7 +32,7 @@ const createReservation = async (req, res) => {
                 message: "Showtime not found",
             });
         }
-        const reservation = await prisma_1.default.$transaction(async (tx) => {
+        const booking = await prisma_1.default.$transaction(async (tx) => {
             const alreadyBooked = await tx.reservedSeat.findMany({
                 where: {
                     showtimeId,
@@ -43,7 +44,7 @@ const createReservation = async (req, res) => {
             if (alreadyBooked.length > 0) {
                 throw new Error("SEATS_ALREADY_BOOKED");
             }
-            const booking = await tx.reservation.create({
+            const createdReservation = await tx.reservation.create({
                 data: {
                     userId: req.user.id,
                     showtimeId,
@@ -54,20 +55,21 @@ const createReservation = async (req, res) => {
                 data: seatIds.map((seatId) => ({
                     seatId,
                     showtimeId,
-                    reservationId: booking.id,
+                    reservationId: createdReservation.id,
                 })),
             });
             await tx.reservationSeat.createMany({
                 data: seatIds.map((seatId) => ({
                     seatId,
-                    reservationId: booking.id,
+                    reservationId: createdReservation.id,
                 })),
             });
-            return booking;
+            return createdReservation;
         });
+        (0, socket_1.getIO)().to(showtimeId).emit("seat-booked", seatIds);
         return res.status(201).json({
             success: true,
-            reservation,
+            reservation: booking,
         });
     }
     catch (error) {
@@ -223,6 +225,7 @@ const cancelReservation = async (req, res) => {
             },
             include: {
                 showtime: true,
+                reservedSeats: true,
             },
         });
         if (!reservation) {
@@ -237,6 +240,7 @@ const cancelReservation = async (req, res) => {
                 message: "Cannot cancel past show",
             });
         }
+        const releasedSeatIds = reservation.reservedSeats.map((seat) => seat.seatId);
         await prisma_1.default.$transaction(async (tx) => {
             await tx.reservedSeat.deleteMany({
                 where: {
@@ -257,6 +261,9 @@ const cancelReservation = async (req, res) => {
                 },
             });
         });
+        (0, socket_1.getIO)()
+            .to(reservation.showtimeId)
+            .emit("seat-unlocked", releasedSeatIds);
         res.json({
             success: true,
             message: "Reservation cancelled",
