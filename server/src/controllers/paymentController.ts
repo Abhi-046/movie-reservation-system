@@ -6,6 +6,8 @@ import razorpay from "../config/razorpay";
 
 import { AuthRequest } from "../types/auth";
 import { getIO } from "../socket";
+import { generateTicket } from "../utils/generateTicket";
+import { sendTicketMail } from "../utils/sendTicketMail";
 
 export const createOrder = async (req: Request, res: Response) => {
   try {
@@ -26,10 +28,10 @@ export const createOrder = async (req: Request, res: Response) => {
 
     const order = await razorpay.orders.create({
       amount: reservation.totalAmount * 100,
-
       currency: "INR",
 
-      receipt: reservation.id,
+      // max 40 chars
+      receipt: reservation.id.slice(0, 40),
     });
 
     return res.json({
@@ -80,8 +82,32 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
       include: {
         reservedSeats: true,
+
+        showtime: {
+          include: {
+            movie: true,
+
+            screen: {
+              include: {
+                theatre: true,
+              },
+            },
+          },
+        },
       },
     });
+
+    const ticketPath = await generateTicket(reservation);
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: reservation.userId,
+      },
+    });
+
+    if (user) {
+      await sendTicketMail(user.email, ticketPath);
+    }
 
     getIO()
       .to(reservation.showtimeId)
@@ -93,7 +119,12 @@ export const verifyPayment = async (req: Request, res: Response) => {
     return res.json({
       success: true,
       message: "Payment verified successfully",
+
       reservation,
+
+      ticketUrl: `/tickets/${reservation.id}.pdf`,
+
+      ticketPath,
     });
   } catch (error) {
     console.log(error);

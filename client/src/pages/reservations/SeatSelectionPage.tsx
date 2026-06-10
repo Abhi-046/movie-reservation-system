@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { socket } from "../../sockets/socket";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 
 type Seat = {
   id: string;
@@ -12,105 +12,74 @@ type Seat = {
 export default function SeatSelectionPage() {
   const { showtimeId } = useParams();
 
-  const [availableSeats, setAvailableSeats] =
-    useState<Seat[]>([]);
+  const navigate = useNavigate();
 
-  const [selectedSeats, setSelectedSeats] =
-    useState<string[]>([]);
+  const [availableSeats, setAvailableSeats] = useState<Seat[]>([]);
 
-  const [lockedSeats, setLockedSeats] =
-    useState<string[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
 
-  const [bookedSeats, setBookedSeats] =
-    useState<string[]>([]);
+  const [lockedSeats, setLockedSeats] = useState<string[]>([]);
+
+  const [bookedSeats, setBookedSeats] = useState<string[]>([]);
+
+  const fetchSeats = async () => {
+    const response = await axios.get(
+      `http://localhost:5000/api/reservations/available/${showtimeId}`,
+    );
+
+    setAvailableSeats(response.data.availableSeats);
+  };
 
   useEffect(() => {
     if (!showtimeId) return;
 
-    fetchSeats();
+    const loadSeats = async () => {
+      const response = await axios.get(
+        `http://localhost:5000/api/reservations/available/${showtimeId}`,
+      );
+      setAvailableSeats(response.data.availableSeats);
+    };
 
-    socket.emit(
-      "join-showtime",
-      showtimeId
-    );
+    loadSeats();
 
-    socket.on(
-      "seat-locked",
-      (seatIds: string[]) => {
-        setLockedSeats((prev) => [
-          ...prev,
-          ...seatIds,
-        ]);
-      }
-    );
+    socket.emit("join-showtime", showtimeId);
 
-    socket.on(
-      "seat-booked",
-      (seatIds: string[]) => {
-        setBookedSeats((prev) => [
-          ...prev,
-          ...seatIds,
-        ]);
-      }
-    );
+    socket.on("seat-locked", (seatIds: string[]) => {
+      setLockedSeats((prev) => [...prev, ...seatIds]);
+    });
 
-    socket.on(
-      "seat-unlocked",
-      (seatIds: string[]) => {
-        setLockedSeats((prev) =>
-          prev.filter(
-            (seat) =>
-              !seatIds.includes(seat)
-          )
-        );
-      }
-    );
+    socket.on("seat-booked", (seatIds: string[]) => {
+      setBookedSeats((prev) => [...prev, ...seatIds]);
+    });
+
+    socket.on("seat-unlocked", (seatIds: string[]) => {
+      setLockedSeats((prev) => prev.filter((seat) => !seatIds.includes(seat)));
+    });
 
     return () => {
       socket.off("seat-locked");
       socket.off("seat-booked");
       socket.off("seat-unlocked");
     };
-  }, [showtimeId]);
+  }, [showtimeId, fetchSeats]);
 
-  const fetchSeats = async () => {
-    const response =
-      await axios.get(
-        `http://localhost:5000/api/reservations/available/${showtimeId}`
-      );
-
-    setAvailableSeats(
-      response.data.availableSeats
-    );
-  };
-
-  const toggleSeat = (
-    seatId: string
-  ) => {
-    if (
-      lockedSeats.includes(seatId) ||
-      bookedSeats.includes(seatId)
-    ) {
+  const toggleSeat = (seatId: string) => {
+    if (lockedSeats.includes(seatId) || bookedSeats.includes(seatId)) {
       return;
     }
 
     setSelectedSeats((prev) =>
       prev.includes(seatId)
-        ? prev.filter(
-            (id) => id !== seatId
-          )
-        : [...prev, seatId]
+        ? prev.filter((id) => id !== seatId)
+        : [...prev, seatId],
     );
   };
 
   const bookSeats = async () => {
     try {
-      const token =
-        localStorage.getItem(
-          "token"
-        );
+      const token = localStorage.getItem("token");
 
-      await axios.post(
+      const response = await axios.post(
         "http://localhost:5000/api/reservations",
         {
           showtimeId,
@@ -120,12 +89,12 @@ export default function SeatSelectionPage() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
-      alert("Booking Successful");
+      const reservationId = response.data.reservation.id;
 
-      setSelectedSeats([]);
+      navigate(`/payment/${reservationId}`);
     } catch (error) {
       console.log(error);
 
@@ -135,51 +104,27 @@ export default function SeatSelectionPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold">
-        Seat Selection
-      </h1>
+      <h1 className="text-2xl font-bold">Seat Selection</h1>
 
       <div className="grid grid-cols-10 gap-2 mt-6">
-        {availableSeats.map(
-          (seat) => (
-            <button
-              key={seat.id}
-              onClick={() =>
-                toggleSeat(seat.id)
-              }
-              className={`
+        {availableSeats.map((seat) => (
+          <button
+            key={seat.id}
+            onClick={() => toggleSeat(seat.id)}
+            className={`
               p-2 border rounded
 
-              ${
-                bookedSeats.includes(
-                  seat.id
-                )
-                  ? "bg-red-500"
-                  : ""
-              }
+              ${bookedSeats.includes(seat.id) ? "bg-red-500" : ""}
 
-              ${
-                lockedSeats.includes(
-                  seat.id
-                )
-                  ? "bg-yellow-500"
-                  : ""
-              }
+              ${lockedSeats.includes(seat.id) ? "bg-yellow-500" : ""}
 
-              ${
-                selectedSeats.includes(
-                  seat.id
-                )
-                  ? "bg-green-500"
-                  : ""
-              }
+              ${selectedSeats.includes(seat.id) ? "bg-green-500" : ""}
             `}
-            >
-              {seat.row}
-              {seat.number}
-            </button>
-          )
-        )}
+          >
+            {seat.row}
+            {seat.number}
+          </button>
+        ))}
       </div>
 
       <button
