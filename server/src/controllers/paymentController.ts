@@ -59,15 +59,33 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
     const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    const isValid = generatedSignature === razorpay_signature;
-
-    if (!isValid) {
+    if (generatedSignature !== razorpay_signature) {
       return res.status(400).json({
         success: false,
         message: "Payment verification failed",
+      });
+    }
+
+    const existingReservation = await prisma.reservation.findUnique({
+      where: {
+        id: reservationId,
+      },
+    });
+
+    if (!existingReservation) {
+      return res.status(404).json({
+        success: false,
+        message: "Reservation not found",
+      });
+    }
+
+    if (existingReservation.status === "CONFIRMED") {
+      return res.status(400).json({
+        success: false,
+        message: "Reservation already confirmed",
       });
     }
 
@@ -81,7 +99,13 @@ export const verifyPayment = async (req: Request, res: Response) => {
       },
 
       include: {
-        reservedSeats: true,
+        user: true,
+
+        reservedSeats: {
+          include: {
+            seat: true,
+          },
+        },
 
         showtime: {
           include: {
@@ -99,21 +123,18 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
     const ticketPath = await generateTicket(reservation);
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: reservation.userId,
-      },
-    });
-
-    if (user) {
-      await sendTicketMail(user.email, ticketPath);
-    }
+    await sendTicketMail(
+      reservation.user.email,
+      ticketPath
+    );
 
     getIO()
       .to(reservation.showtimeId)
       .emit(
         "payment-confirmed",
-        reservation.reservedSeats.map((seat) => seat.seatId),
+        reservation.reservedSeats.map(
+          (seat) => seat.seatId
+        ),
       );
 
     return res.json({
@@ -123,8 +144,6 @@ export const verifyPayment = async (req: Request, res: Response) => {
       reservation,
 
       ticketUrl: `/tickets/${reservation.id}.pdf`,
-
-      ticketPath,
     });
   } catch (error) {
     console.log(error);
@@ -136,7 +155,10 @@ export const verifyPayment = async (req: Request, res: Response) => {
   }
 };
 
-export const getMyPayments = async (req: AuthRequest, res: Response) => {
+export const getMyPayments = async (
+  req: AuthRequest,
+  res: Response,
+) => {
   try {
     if (!req.user) {
       return res.status(401).json({
@@ -148,8 +170,27 @@ export const getMyPayments = async (req: AuthRequest, res: Response) => {
     const payments = await prisma.reservation.findMany({
       where: {
         userId: req.user.id,
-
         status: "CONFIRMED",
+      },
+
+      include: {
+        showtime: {
+          include: {
+            movie: true,
+
+            screen: {
+              include: {
+                theatre: true,
+              },
+            },
+          },
+        },
+
+        reservedSeats: {
+          include: {
+            seat: true,
+          },
+        },
       },
 
       orderBy: {
@@ -162,6 +203,8 @@ export const getMyPayments = async (req: AuthRequest, res: Response) => {
       payments,
     });
   } catch (error) {
+    console.log(error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to fetch payments",

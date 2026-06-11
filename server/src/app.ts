@@ -74,7 +74,7 @@ app.use(errorHandler);
 app.get("/api/test-mail", async (req, res) => {
   await transporter.sendMail({
     from: process.env.EMAIL_USER,
-    to: "bollaganiabhinav123456@gmail.com",
+    to: "abhinavbollagani528@gmail.com",
     subject: "Test",
     text: "Mail working",
   });
