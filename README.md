@@ -192,19 +192,19 @@ npm install
 Create `.env`
 
 ```env
-DATABASE_URL=
+DATABASE_URL="postgresql://postgres:postgres@postgres:5432/movie_booking"
 
-JWT_SECRET=
+JWT_SECRET=supersecretjwtkey
 
 PORT=5000
 
 REDIS_URL=redis://localhost:6379
 
-RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
+RAZORPAY_KEY_ID=rzp_test_SzQTF8ehOCCPTc
+RAZORPAY_KEY_SECRET=WoQInqjf0nYVDlY0APG1qHz9
 
-EMAIL_USER=
-EMAIL_PASS=
+EMAIL_USER=abhinavbollagani528@gmail.com
+EMAIL_PASS=umsftmzdfssdgpwg
 ```
 
 ---
